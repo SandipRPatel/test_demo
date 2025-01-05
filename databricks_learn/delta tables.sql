@@ -618,4 +618,188 @@ when not matched and bu.category = 'Computer Science' then insert *;
 
 -- COMMAND ----------
 
+select * from books
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC ### **advanced transformations**
+
+-- COMMAND ----------
+
+select * from customers 
+
+-- COMMAND ----------
+
+
+select profile,profile:first_name,profile:address:country from customers
+
+
+-- COMMAND ----------
+
+select from_json(profile) from customers
+
+
+-- COMMAND ----------
+
+describe extended customers
+
+-- COMMAND ----------
+
+create or replace temp view parsed_customers as 
+select customer_id,from_json(profile,schema_of_json('{"first_name":"Susana","last_name":"Gonnely","gender":"Female","address":{"street":"760 Express Court","city":"Obrenovac","country":"Serbia"}}')) as profile_struct from customers;
+
+select * from parsed_customers;
+
+
+-- COMMAND ----------
+
+describe extended parsed_customers
+
+-- COMMAND ----------
+
+select *,profile_struct.address.city,profile_struct.gender from parsed_customers
+
+
+-- COMMAND ----------
+
+create or replace temp view customer_final as 
+select customer_id,profile_struct.* from parsed_customers;
+select * from customer_final;
+
+-- COMMAND ----------
+
+select * from orders
+
+
+-- COMMAND ----------
+
+select order_id,customer_id,books.book_id,books,explode(books) as new_books from orders order by customer_id asc,order_id asc;
+
+-- COMMAND ----------
+
+select customer_id,collect_set(order_id) as order_set,collect_set(books.book_id) as bok_id_set from orders group by customer_id;
+
+
+-- COMMAND ----------
+
+select customer_id,collect_set(books.book_id) as before_flatten,array_distinct(flatten(collect_set(books.book_id))) as after_flatten from orders group by customer_id;
+
+
+
+-- COMMAND ----------
+
+create or replace view orders_enriched as 
+select * from (
+  select *,explode(books) as book from orders)  as a inner join books as b on a.book.book_id = b.book_id;
+select * from orders_enriched;
+
+-- COMMAND ----------
+
+create or replace temp view orders_update as 
+select * from parquet.`dbfs:/mnt/demo-datasets/bookstore/orders-new`;
+
+select * from orders union select * from orders_update;
+
+-- COMMAND ----------
+
+select * from orders minus select * from orders_update;
+
+
+-- COMMAND ----------
+
+select * from orders intersect select * from orders_update;
+
+
+-- COMMAND ----------
+
+
+
+-- COMMAND ----------
+
+-- pivot
+create or replace table customer_transaction as 
+select * from (
+  select customer_id,book.book_id as book_id,book.quantity as book_quantity from orders_enriched
+) pivot (sum(book_quantity) for book_id in ('B01','B02','B03','B04','B05','B06','B07','B08','B09','B10','B11','B12'));
+
+select * from customer_transaction;
+
+-- COMMAND ----------
+
+-- unpivot
+
+select customer_id,book_id,book_quantity from customer_transaction unpivot (book_quantity for book_id in (B01,B02,B03,B04,B05,B06,B07,B08,B09,B10,B11,B12))
+ORDER BY 1,2,3
+
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC **HIGHER ORDER FUNCTIONS AND SQL UDFS**
+
+-- COMMAND ----------
+
+select * from orders
+
+-- COMMAND ----------
+
+select order_id,books,filter(books,i->i.subtotal>=30) as subtotal_30 from orders;
+
+-- COMMAND ----------
+
+select order_id,subtotal_30 from (select order_id,books,filter(books,i->i.subtotal>=30) as subtotal_30 from orders) as t1
+where size(t1.subtotal_30) >=3;
+
+-- COMMAND ----------
+
+select order_id,books,transform(books,i->cast(i.subtotal*0.8 as int)) as subtotal_80_discount from orders;
+
+-- COMMAND ----------
+
+create or replace function get_url(email string)
+returns string
+return concat("https://",split(email,'@')[1])
+
+
+-- COMMAND ----------
+
+select email,get_url(email) as website from customers
+
+-- COMMAND ----------
+
+describe function get_url
+
+-- COMMAND ----------
+
+describe function extended get_url;
+
+-- COMMAND ----------
+
+create or replace function site_type(email string)
+returns string
+return case
+when email like '%.com' then 'commercial business'
+when email like '%.org' then 'non-profit organization'
+when email like '%.gov' then 'government agency'
+when email like '%.edu' then 'educational institution'
+else 'unknown' end
+
+
+-- COMMAND ----------
+
+select email,site_type(email) as domain from customers
+
+-- COMMAND ----------
+
+select email,value from customers as a 
+cross apply string_split(email,'@');
+
+-- COMMAND ----------
+
+select email,explode(split(email,'@')) as new_email from customers
+-- cross apply function is not available in databricks
+
+-- COMMAND ----------
+
 
