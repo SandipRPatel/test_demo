@@ -506,4 +506,116 @@ describe extended sunlight_databricks_2025.default.address2;
 
 -- COMMAND ----------
 
+-- MAGIC %python
+-- MAGIC spark
+
+-- COMMAND ----------
+
+use hive_metastore.default
+
+-- COMMAND ----------
+
+-- MAGIC %python
+-- MAGIC display(dbutils.fs.ls('dbfs:/mnt/demo-datasets/bookstore'))
+-- MAGIC
+-- MAGIC
+
+-- COMMAND ----------
+
+create table orders as select * from parquet.`dbfs:/mnt/demo-datasets/bookstore/orders`;
+select * from orders;
+
+-- COMMAND ----------
+
+describe extended orders;
+
+-- COMMAND ----------
+
+create or replace table orders as select * from parquet.`dbfs:/mnt/demo-datasets/bookstore/orders`;
+describe history orders;
+
+-- COMMAND ----------
+
+insert overwrite orders
+select * from parquet.`dbfs:/mnt/demo-datasets/bookstore/orders`;
+describe history orders;
+
+-- COMMAND ----------
+
+-- create or replace table command accept the new table schema, but overwrite command does not accept new schema.
+
+insert overwrite orders
+select *,current_timestamp() as current_timestamp from parquet.`dbfs:/mnt/demo-datasets/bookstore/orders`;
+
+-- COMMAND ----------
+
+insert into orders select * from parquet.`dbfs:/mnt/demo-datasets/bookstore/orders-new`
+
+-- COMMAND ----------
+
+describe history orders
+
+-- COMMAND ----------
+
+select * from customers;
+
+-- COMMAND ----------
+
+create or replace temp view customer_update as
+select * from json.`dbfs:/mnt/demo-datasets/bookstore/customers-json-new`;
+
+
+
+-- COMMAND ----------
+
+merge into customers as c using customer_update as cu
+on c.customer_id = cu.customer_id
+when matched and c.email is null and cu.email is not null then update set c.email = cu.email, c.updated = cu.updated
+when not matched then insert *;
+
+
+-- COMMAND ----------
+
+create or replace temp view books_update (book_id string,title string, author string, category string, price double)
+using csv
+options (path = 'dbfs:/mnt/demo-datasets/bookstore/books-csv-new', header=True,delimiter=';');
+
+select * from books_update;
+
+
+-- COMMAND ----------
+
+
+
+-- COMMAND ----------
+
+create table books as select * from books_csv;
+
+-- COMMAND ----------
+
+merge into books as b
+using books_update as bu
+on b.book_id = bu.book_id and b.title = bu.title
+when not matched and bu.category = 'Computer Science' then insert *;
+
+
+-- COMMAND ----------
+
+describe extended books
+
+-- COMMAND ----------
+
+merge into books as b
+using books_update as bu
+on b.book_id = bu.book_id and b.title = bu.title
+when not matched and bu.category = 'Computer Science' then insert *;
+-- if i am running it again, it will not add any duplicate records.
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC merge into command can be applied on delta tables only
+
+-- COMMAND ----------
+
 
